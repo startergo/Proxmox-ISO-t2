@@ -50,8 +50,8 @@ apt-get update -q
 # Install initramfs prerequisites now, before any kernel package is unpacked.
 # dpkg runs /etc/kernel/postinst.d/initramfs-tools immediately on kernel install,
 # so zstd and console-setup must be present at that point.
-apt-get install -y --no-install-recommends zstd console-setup \
-    || log "WARNING: zstd/console-setup unavailable — initramfs may use gzip and lack setupcon"
+# Fail hard if these can't be installed — missing them produces a broken initramfs.
+apt-get install -y zstd console-setup
 
 # ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────
 log "---> 2. Installing T2 pve-kernel packages..."
@@ -71,39 +71,27 @@ fi
 # ── 3. Install T2 hardware support packages ───────────────────────────────────
 log "---> 3. Installing T2 hardware support packages..."
 
-# Prevent package post-install scripts from starting services or running
-# modprobe in the chroot — neither systemd nor T2 kernel modules are present.
+# Suppress service management in chroot:
+#  - policy-rc.d: blocks invoke-rc.d calls
+#  - DPKG_MAINTSCRIPT_HELPER_METHOD: disables maintscript service helpers
+#  - mask tiny-dfr.service so 'systemctl start tiny-dfr.service' exits 0
+#    (masked units are a no-op start, not "unit not found" errors)
 cat > /usr/sbin/policy-rc.d << 'POLICY'
 #!/bin/sh
-# Disable service (re)starts during package installation in chroot
 exit 101
 POLICY
 chmod +x /usr/sbin/policy-rc.d
+export DPKG_MAINTSCRIPT_HELPER_METHOD=none
 
-# Shim modprobe so post-install scripts that probe T2/Broadcom modules don't
-# hard-fail (modules simply aren't present under the build host kernel).
-SYSTEMCTL_REAL=$(readlink -f /usr/bin/systemctl 2>/dev/null || echo /usr/bin/systemctl)
-MODPROBE_REAL=$(readlink -f /sbin/modprobe 2>/dev/null || readlink -f /usr/sbin/modprobe 2>/dev/null || echo /usr/sbin/modprobe)
+# Create a masked unit so tiny-dfr-adv postinst 'systemctl start' exits cleanly
+mkdir -p /run/systemd/system
+ln -sf /dev/null /etc/systemd/system/tiny-dfr.service
 
+# Shim modprobe so apple-firmware postinst doesn't hard-fail on missing T2 modules.
+MODPROBE_REAL=$(readlink -f /usr/sbin/modprobe 2>/dev/null || echo /usr/sbin/modprobe)
 mv "${MODPROBE_REAL}" "${MODPROBE_REAL}.real" 2>/dev/null || true
-cat > "${MODPROBE_REAL}" << 'MODPROBE'
-#!/bin/sh
-# No-op shim: kernel modules cannot be loaded inside the build chroot.
-exit 0
-MODPROBE
+printf '#!/bin/sh\nexit 0\n' > "${MODPROBE_REAL}"
 chmod +x "${MODPROBE_REAL}"
-
-# Shim systemctl at its canonical path so postinst scripts that call
-# 'systemctl start' directly don't fail — no systemd in chroot.
-# /bin and /sbin are symlinks to /usr/bin and /usr/sbin in merged-usr Debian,
-# so we must shim the resolved canonical path.
-mv "${SYSTEMCTL_REAL}" "${SYSTEMCTL_REAL}.real" 2>/dev/null || true
-cat > "${SYSTEMCTL_REAL}" << 'SYSTEMCTL'
-#!/bin/sh
-# No-op shim: systemd is not running inside the build chroot.
-exit 0
-SYSTEMCTL
-chmod +x "${SYSTEMCTL_REAL}"
 
 # The Proxmox squashfs is already merged-usr but lacks this marker package,
 # which blocks init-system-helpers and packages that depend on it.
@@ -120,10 +108,10 @@ log "---> 3b. Installing apple-firmware (WiFi/Bluetooth firmware from macOS)..."
 apt-get install -y apple-firmware \
     || log "WARNING: apple-firmware unavailable"
 
-# Restore real modprobe and systemctl, and remove policy-rc.d now that package installs are done.
+# Restore real modprobe and remove chroot guards now that package installs are done.
 mv "${MODPROBE_REAL}.real" "${MODPROBE_REAL}" 2>/dev/null || true
-mv "${SYSTEMCTL_REAL}.real" "${SYSTEMCTL_REAL}" 2>/dev/null || true
 rm -f /usr/sbin/policy-rc.d
+unset DPKG_MAINTSCRIPT_HELPER_METHOD
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
 log "---> 4. Configuring initramfs to include T2 modules..."
