@@ -28,6 +28,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # required to create GitHub Releases and upload assets
 
     steps:
       - name: Checkout repository
