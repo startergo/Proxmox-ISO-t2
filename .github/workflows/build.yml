@@ -120,7 +120,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
-          prerelease: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: false
           files: |
             out/*.iso
             out/*.sha256
