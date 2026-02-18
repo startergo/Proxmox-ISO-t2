@@ -47,6 +47,12 @@ done
 # CA certs were copied from the host by build.sh so HTTPS repos work.
 apt-get update -q
 
+# Install initramfs prerequisites now, before any kernel package is unpacked.
+# dpkg runs /etc/kernel/postinst.d/initramfs-tools immediately on kernel install,
+# so zstd and console-setup must be present at that point.
+apt-get install -y --no-install-recommends zstd console-setup \
+    || log "WARNING: zstd/console-setup unavailable — initramfs may use gzip and lack setupcon"
+
 # ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────
 log "---> 2. Installing T2 pve-kernel packages..."
 if ls /tmp/packages/proxmox-kernel-*pve-t2*_amd64.deb 1>/dev/null 2>&1; then
@@ -84,15 +90,20 @@ exit 0
 MODPROBE
 chmod +x /sbin/modprobe
 
+# Shim systemctl so post-install scripts that call 'systemctl start/restart'
+# directly (bypassing policy-rc.d) don't fail — no systemd in chroot.
+mv /bin/systemctl /bin/systemctl.real 2>/dev/null || true
+cat > /bin/systemctl << 'SYSTEMCTL'
+#!/bin/sh
+# No-op shim: systemd is not running inside the build chroot.
+exit 0
+SYSTEMCTL
+chmod +x /bin/systemctl
+
 # The Proxmox squashfs is already merged-usr but lacks this marker package,
 # which blocks init-system-helpers and packages that depend on it.
 apt-get install -y --no-install-recommends usr-is-merged \
     || log "WARNING: usr-is-merged unavailable — subsequent installs may fail"
-
-# zstd: faster initramfs compression (fallback is gzip without it)
-# console-setup: provides setupcon, required by initramfs-tools hooks
-apt-get install -y --no-install-recommends zstd console-setup \
-    || log "WARNING: zstd/console-setup unavailable — initramfs may use gzip and lack setupcon"
 
 # tiny-dfr-adv: Touch Bar daemon (bookworm t2linux repo provides tiny-dfr-adv)
 apt-get install -y tiny-dfr-adv 2>/dev/null \
@@ -104,8 +115,9 @@ log "---> 3b. Installing apple-firmware (WiFi/Bluetooth firmware from macOS)..."
 apt-get install -y apple-firmware \
     || log "WARNING: apple-firmware unavailable"
 
-# Restore real modprobe and remove policy-rc.d now that package installs are done.
+# Restore real modprobe and systemctl, and remove policy-rc.d now that package installs are done.
 mv /sbin/modprobe.real /sbin/modprobe 2>/dev/null || true
+mv /bin/systemctl.real /bin/systemctl 2>/dev/null || true
 rm -f /usr/sbin/policy-rc.d
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
