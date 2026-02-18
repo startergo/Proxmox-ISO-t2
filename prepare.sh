@@ -10,7 +10,8 @@ log() { echo "[prepare] $*"; }
 
 # ── Create directory layout ───────────────────────────────────────────────────
 mkdir -p "${WORK_DIR}" "${OUT_DIR}" "${PACKAGES_DIR}"
-mkdir -p "${SCRIPT_DIR}/overlayfs/etc/apt/trusted.gpg.d"
+mkdir -p "${SCRIPT_DIR}/overlayfs/etc/apt/trusted.gpg.d" \
+         "${SCRIPT_DIR}/overlayfs/etc/apt/sources.list.d"
 
 # ── Download official Proxmox VE ISO ─────────────────────────────────────────
 ISO_DEST="${WORK_DIR}/${PVE_ISO_NAME}"
