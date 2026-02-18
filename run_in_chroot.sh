@@ -3,9 +3,8 @@
 # Called by build.sh stage 4. Installs the T2 kernel, hardware support
 # packages, and configures the system for T2 Mac hardware.
 #
-# WiFi strategy: uses broadcom-sta-dkms (Debian equivalent of Arch's broadcom-wl).
-# This is the same approach as EndeavourOS-ISO-t2 — no Apple firmware blobs needed.
-# The wl.ko module is built at ISO build time via DKMS using the T2 kernel headers.
+# WiFi: firmware-brcm80211 from Debian non-free-firmware provides the
+# Broadcom WiFi firmware. No DKMS build required.
 #
 # Do NOT run this directly — it is copied into the squashfs by build.sh.
 
@@ -37,6 +36,11 @@ deb http://deb.debian.org/debian-security bookworm-security main contrib non-fre
 EOF
 fi
 
+# Install ca-certificates first (from Debian HTTP repos) so HTTPS repos work
+apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list \
+                  -o Dir::Etc::sourceparts=/dev/null
+apt-get install -y --no-install-recommends ca-certificates
+
 # t2.list was placed by overlayfs/ (key was also placed by overlayfs/)
 apt-get update -q
 
@@ -65,21 +69,10 @@ apt-get install -y tiny-dfr 2>/dev/null \
     && log "  tiny-dfr installed (Touch Bar support)" \
     || log "  tiny-dfr not available — skipping (Touch Bar will not be functional)"
 
-# ── 3b. Install broadcom-sta-dkms for WiFi (same approach as EndeavourOS-ISO-t2) ──
-log "---> 3b. Installing broadcom-sta-dkms (Broadcom WiFi, no Apple firmware needed)..."
-# broadcom-sta-dkms is the Debian equivalent of Arch's broadcom-wl.
-# It provides the out-of-tree 'wl' kernel module and works without Apple firmware blobs.
-# DKMS builds wl.ko here at ISO build time using the T2 kernel headers already installed.
-apt-get install -y dkms broadcom-sta-dkms broadcom-sta-common \
-    || log "WARNING: broadcom-sta-dkms unavailable — WiFi will require firmware extraction"
-
-# Verify the wl module was built for the T2 kernel
-T2_KVER_CHECK=$(ls /lib/modules/ | grep -i t2 | sort -V | tail -1)
-if [[ -n "${T2_KVER_CHECK}" ]] && [[ -f "/lib/modules/${T2_KVER_CHECK}/updates/dkms/wl.ko" ]]; then
-    log "  wl.ko built successfully for ${T2_KVER_CHECK}"
-else
-    log "  WARNING: wl.ko not found for ${T2_KVER_CHECK} — DKMS build may have failed"
-fi
+# ── 3b. Install Broadcom WiFi firmware ───────────────────────────────────────
+log "---> 3b. Installing firmware-brcm80211 (Broadcom WiFi firmware)..."
+apt-get install -y firmware-brcm80211 \
+    || log "WARNING: firmware-brcm80211 unavailable"
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
 log "---> 4. Configuring initramfs to include T2 modules..."
@@ -130,7 +123,7 @@ log "---> 8. Creating package versions reference..."
 {
     dpkg -l 'proxmox-kernel-*pve-t2*' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
     dpkg -l 'apple-t2-audio-config' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
-    dpkg -l 'broadcom-sta-dkms' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'firmware-brcm80211' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
     dpkg -l 'tiny-dfr' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
 } > /usr/share/proxmox-t2/package-versions.txt 2>/dev/null || true
 
