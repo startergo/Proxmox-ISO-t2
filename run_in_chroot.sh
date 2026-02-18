@@ -36,6 +36,13 @@ deb http://deb.debian.org/debian-security bookworm-security main contrib non-fre
 EOF
 fi
 
+# Disable Proxmox enterprise/ceph repos — they require a subscription and
+# return 401 in CI; we only need Debian + t2linux repos for the build.
+for f in /etc/apt/sources.list.d/pve-enterprise.list \
+          /etc/apt/sources.list.d/ceph.list; do
+    [[ -f "${f}" ]] && sed -i 's/^deb /# deb /' "${f}" || true
+done
+
 # t2.list was placed by overlayfs/ (key was also placed by overlayfs/)
 # CA certs were copied from the host by build.sh so HTTPS repos work.
 apt-get update -q
