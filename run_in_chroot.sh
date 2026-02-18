@@ -70,6 +70,11 @@ log "---> 3. Installing T2 hardware support packages..."
 apt-get install -y --no-install-recommends usr-is-merged \
     || log "WARNING: usr-is-merged unavailable — subsequent installs may fail"
 
+# zstd: faster initramfs compression (fallback is gzip without it)
+# console-setup: provides setupcon, required by initramfs-tools hooks
+apt-get install -y --no-install-recommends zstd console-setup \
+    || log "WARNING: zstd/console-setup unavailable — initramfs may use gzip and lack setupcon"
+
 # tiny-dfr-adv: Touch Bar daemon (bookworm t2linux repo provides tiny-dfr-adv)
 apt-get install -y tiny-dfr-adv 2>/dev/null \
     && log "  tiny-dfr-adv installed (Touch Bar support)" \
