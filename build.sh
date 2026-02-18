@@ -262,6 +262,29 @@ stage_repack_iso() {
     local mod_date
     mod_date=$(date +%Y%m%d%H%M%S00)
 
+    # Dynamically locate boot images — paths vary between Proxmox versions
+    local eltorito_abs efi_img_abs eltorito_rel efi_img_rel
+
+    eltorito_abs=$(find "${ISO_EXTRACT_DIR}" -name "eltorito.img" -type f | head -1)
+    if [[ -z "${eltorito_abs}" ]]; then
+        echo "ERROR: eltorito.img not found under ${ISO_EXTRACT_DIR}"
+        echo "       ISO boot directory contents:"
+        find "${ISO_EXTRACT_DIR}" -maxdepth 5 | sort
+        exit 1
+    fi
+    eltorito_rel="/${eltorito_abs#${ISO_EXTRACT_DIR}/}"
+    log "  BIOS eltorito : ${eltorito_rel}"
+
+    efi_img_abs=$(find "${ISO_EXTRACT_DIR}" -name "efi.img" -type f | head -1)
+    if [[ -z "${efi_img_abs}" ]]; then
+        echo "ERROR: efi.img not found under ${ISO_EXTRACT_DIR}"
+        echo "       ISO boot directory contents:"
+        find "${ISO_EXTRACT_DIR}" -maxdepth 5 | sort
+        exit 1
+    fi
+    efi_img_rel="/${efi_img_abs#${ISO_EXTRACT_DIR}/}"
+    log "  EFI image     : ${efi_img_rel}"
+
     xorriso -as mkisofs \
         -o "${ISO_OUT}" \
         -r -V "${ISO_LABEL}" \
@@ -270,11 +293,11 @@ stage_repack_iso() {
         --protective-msdos-label \
         -efi-boot-part --efi-boot-image \
         -c '/boot/boot.cat' \
-        -b '/boot/grub/i386-pc/eltorito.img' \
+        -b "${eltorito_rel}" \
         -no-emul-boot -boot-load-size 4 -boot-info-table \
         --grub2-boot-info \
         -eltorito-alt-boot \
-        -e '/boot/grub/efi.img' \
+        -e "${efi_img_rel}" \
         -no-emul-boot \
         "${ISO_EXTRACT_DIR}"
 
