@@ -1,0 +1,97 @@
+name: Build Proxmox-ISO-t2
+
+on:
+  push:
+    branches: [ senpai, main ]
+    tags:     [ 'v*' ]
+  pull_request:
+    branches: [ senpai, main ]
+  workflow_dispatch:
+    inputs:
+      pve_version:
+        description: 'Proxmox VE version to target (e.g. 8.4)'
+        required: false
+        default: ''
+      t2_kernel_version:
+        description: 'T2 kernel version tag (e.g. 6.17.13-1-t2-1)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            xorriso \
+            squashfs-tools \
+            mtools \
+            curl \
+            wget \
+            gpg \
+            dosfstools \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            isolinux
+
+      - name: Override versions from workflow_dispatch inputs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ -n "${{ github.event.inputs.pve_version }}" ]]; then
+            sed -i "s/^PVE_VERSION=.*/PVE_VERSION=\"${{ github.event.inputs.pve_version }}\"/" build.conf
+          fi
+          if [[ -n "${{ github.event.inputs.t2_kernel_version }}" ]]; then
+            sed -i "s/^T2_KERNEL_VERSION=.*/T2_KERNEL_VERSION=\"${{ github.event.inputs.t2_kernel_version }}\"/" build.conf
+          fi
+
+      - name: Cache Proxmox VE ISO
+        uses: actions/cache@v4
+        with:
+          path: work/*.iso
+          key: pve-iso-${{ hashFiles('build.conf') }}
+          restore-keys: pve-iso-
+
+      - name: Cache T2 kernel packages
+        uses: actions/cache@v4
+        with:
+          path: packages/*.deb
+          key: t2-kernel-${{ hashFiles('build.conf') }}
+          restore-keys: t2-kernel-
+
+      - name: Run prepare.sh
+        run: bash prepare.sh
+
+      - name: Run build.sh
+        run: sudo bash build.sh
+
+      - name: Verify ISO integrity
+        run: |
+          sha256sum --check out/*.sha256
+          echo "--- ISO details ---"
+          ls -lh out/*.iso
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxmox-ve-t2-iso
+          path: |
+            out/*.iso
+            out/*.sha256
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.iso
+            out/*.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

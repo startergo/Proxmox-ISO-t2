@@ -1,0 +1,37 @@
+# packages.list — Proxmox-ISO-t2
+# Documents T2-specific package additions to the official Proxmox VE ISO.
+# All base Proxmox VE packages are inherited from the upstream ISO unchanged.
+# This file is for reference only; the build scripts use it as documentation.
+
+# ── T2 KERNEL ────────────────────────────────────────────────────────────────
+# Source: https://github.com/AdityaGarg8/pve-edge-kernel-t2/releases
+# Format: pve-kernel-* — integrates with proxmox-boot-tool natively
+pve-kernel-VERSION-t2        # T2-patched Proxmox VE kernel (apple-bce built in)
+pve-headers-VERSION-t2       # Kernel headers (for any DKMS modules)
+
+# ── T2 HARDWARE SUPPORT ───────────────────────────────────────────────────────
+# Source: https://github.com/AdityaGarg8/t2-ubuntu-repo (bookworm APT repo)
+apple-t2-audio-config        # ALSA/PipeWire DSP config for T2 HDA audio device
+tiny-dfr                     # Touch Bar userspace daemon (optional, skip on Mac mini)
+
+# ── BROADCOM WIFI DRIVER ──────────────────────────────────────────────────────
+# Same approach as EndeavourOS-ISO-t2 (which uses broadcom-wl on Arch).
+# Out-of-tree wl driver — no Apple firmware blobs needed, works offline.
+# The wl.ko module is built at ISO build time via DKMS.
+# Source: Debian non-free repository
+dkms                         # DKMS framework
+broadcom-sta-dkms            # Broadcom out-of-tree wl driver (Debian equiv of broadcom-wl)
+broadcom-sta-common          # Supporting files for broadcom-sta
+
+# ── STANDARD PROXMOX VE PACKAGES (inherited from official ISO) ────────────────
+# proxmox-ve              — meta-package (pulls all components)
+# pve-manager             — web management interface
+# pve-kernel-*            — standard Proxmox kernel (replaced by T2 kernel above)
+# qemu-server             — VM/KVM support
+# pve-lxc / lxc          — Linux Container support
+# pve-firewall            — firewall management
+# corosync                — cluster communication
+# postfix                 — mail transport
+# open-iscsi              — iSCSI initiator
+# zfsutils-linux          — ZFS userspace tools
+# (and many more — see official Proxmox VE package list)

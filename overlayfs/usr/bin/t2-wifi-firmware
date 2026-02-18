@@ -1,0 +1,48 @@
+#!/bin/bash
+# t2-wifi-firmware — T2 Mac WiFi status and troubleshooting helper
+#
+# WiFi uses broadcom-sta (wl module) — same driver as EndeavourOS-ISO-t2's broadcom-wl.
+# No Apple firmware extraction required. The wl module is pre-built in the ISO.
+
+echo "=== T2 Mac WiFi Status ==="
+echo ""
+echo "Driver: broadcom-sta (wl module)"
+echo "  This ISO uses the out-of-tree Broadcom WiFi driver (broadcom-sta-dkms)."
+echo "  No Apple firmware extraction is needed."
+echo ""
+
+# ── Check wl module status ────────────────────────────────────────────────────
+echo "Module status:"
+if lsmod | grep -q "^wl "; then
+    echo "  wl: LOADED — WiFi driver is active."
+elif modinfo wl &>/dev/null; then
+    echo "  wl: available but NOT loaded."
+    echo "  To activate manually:"
+    echo "    modprobe -r brcmfmac brcmsmac b43 bcma 2>/dev/null; modprobe wl"
+else
+    echo "  wl: NOT AVAILABLE in kernel $(uname -r)"
+    echo "  The DKMS build may have failed during ISO creation."
+fi
+
+# ── Check Broadcom device visibility ─────────────────────────────────────────
+echo ""
+echo "Broadcom PCI device:"
+lspci -nn | grep -iE 'broadcom|14e4' | grep -iE 'network|wireless' \
+    && true || echo "  No Broadcom network device detected via lspci."
+
+# ── Check network interfaces ──────────────────────────────────────────────────
+echo ""
+echo "Network interfaces:"
+ip link show | grep -E "^[0-9]+: " | awk '{print "  "$2}' | tr -d ':'
+
+# ── Troubleshooting ───────────────────────────────────────────────────────────
+echo ""
+echo "Troubleshooting:"
+echo "  If wl is loaded but no interface appears:"
+echo "    dmesg | grep -i 'wl\|broadcom\|brcm'"
+echo ""
+echo "  If wl module is unavailable:"
+echo "    dpkg -l broadcom-sta-dkms   # check if package is installed"
+echo "    dkms status                 # check DKMS build status"
+echo ""
+echo "  Hardware setup log: /var/log/t2-hardware-setup.log"

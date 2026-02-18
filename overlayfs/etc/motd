@@ -1,0 +1,16 @@
+
+Proxmox VE - T2 Mac Edition
+============================
+T2 hardware support included:
+  Kernel  : pve-edge-kernel-t2 (apple-bce built in)
+  WiFi    : broadcom-sta/wl driver (no Apple firmware needed — activated automatically)
+  Audio   : apple-t2-audio-config
+  Touch Bar: tiny-dfr (if installed)
+
+WiFi is activated automatically at boot. Run /usr/bin/t2-wifi-firmware to check status.
+
+After installation the T2 kernel will be set up automatically on first boot.
+
+Sources: https://github.com/t2linux/wiki
+         https://github.com/AdityaGarg8/pve-edge-kernel-t2
+

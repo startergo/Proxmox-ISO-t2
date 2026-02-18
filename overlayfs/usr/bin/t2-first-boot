@@ -1,0 +1,111 @@
+#!/bin/bash
+# t2-first-boot — Post-install T2 kernel setup
+# Runs once on the first boot of the installed Proxmox system.
+# Controlled by t2-first-boot.service (ConditionPathExists=!/etc/t2-first-boot-done).
+#
+# What this does:
+#   1. Adds t2linux APT repository to the installed system
+#   2. Installs T2 pve-kernel (from staged .deb or downloads fallback)
+#   3. Configures GRUB with T2 kernel parameters
+#   4. Updates initramfs for apple-bce
+#   5. Pins T2 kernel via proxmox-boot-tool
+#   6. Creates sentinel file, then reboots into T2 kernel
+
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+SENTINEL="/etc/t2-first-boot-done"
+LOG="/var/log/t2-first-boot.log"
+STAGED_PKGS="/usr/share/proxmox-t2/packages"
+
+exec > >(tee -a "${LOG}") 2>&1
+
+log() { echo "[t2-first-boot] $*"; }
+
+# Guard: should not run if sentinel exists (service handles this, but be safe)
+if [[ -f "${SENTINEL}" ]]; then
+    log "Sentinel found — first boot already completed. Exiting."
+    exit 0
+fi
+
+log "========================================"
+log " T2 Mac First Boot Post-Install Setup"
+log "========================================"
+log "Log: ${LOG}"
+
+# ── 1. Add t2linux APT repository ────────────────────────────────────────────
+log "1. Adding t2linux APT repository..."
+mkdir -p /etc/apt/trusted.gpg.d/
+curl -sL "https://adityagarg8.github.io/t2-ubuntu-repo/KEY.gpg" \
+    | gpg --dearmor > /etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg
+echo "deb [signed-by=/etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg] https://github.com/AdityaGarg8/t2-ubuntu-repo/releases/download/bookworm ./" \
+    > /etc/apt/sources.list.d/t2.list
+
+# Ensure non-free-firmware for Broadcom
+if ! grep -q "non-free-firmware" /etc/apt/sources.list 2>/dev/null; then
+    sed -i '/^deb .* bookworm / s/$/ non-free non-free-firmware/' /etc/apt/sources.list 2>/dev/null || true
+fi
+
+apt-get update -q
+
+# ── 2. Install T2 pve-kernel ──────────────────────────────────────────────────
+log "2. Installing T2 pve-kernel on installed system..."
+if ls "${STAGED_PKGS}/pve-kernel-"*t2*"_amd64.deb" 1>/dev/null 2>&1; then
+    log "  Using staged .deb from ${STAGED_PKGS}/"
+    dpkg -i "${STAGED_PKGS}/pve-kernel-"*t2*"_amd64.deb" || apt-get install -f -y
+    dpkg -i "${STAGED_PKGS}/pve-headers-"*t2*"_amd64.deb" 2>/dev/null || true
+else
+    log "  Staged packages not found — installing from t2linux APT repo..."
+    apt-get install -y "pve-kernel-$(apt-cache search 'pve-kernel.*t2' | sort -V | tail -1 | awk '{print $1}')" \
+        || { log "ERROR: Could not install T2 kernel. Check internet connectivity."; exit 1; }
+fi
+
+# ── 3. Install T2 audio and WiFi support ─────────────────────────────────────
+log "3. Installing T2 hardware packages..."
+# broadcom-sta-dkms: out-of-tree wl driver (no Apple firmware needed, same as broadcom-wl on Arch)
+apt-get install -y apple-t2-audio-config dkms broadcom-sta-dkms broadcom-sta-common || true
+
+# ── 4. Configure GRUB for T2 ─────────────────────────────────────────────────
+log "4. Configuring GRUB kernel parameters..."
+sed -i 's|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt pcie_ports=compat"|' \
+    /etc/default/grub
+update-grub 2>/dev/null || grub-mkconfig -o /boot/grub/grub.cfg
+
+# ── 5. Configure initramfs for T2 modules ────────────────────────────────────
+log "5. Configuring initramfs..."
+grep -q "^apple-bce"    /etc/initramfs-tools/modules 2>/dev/null \
+    || echo "apple-bce"    >> /etc/initramfs-tools/modules
+grep -q "^apple-ibridge" /etc/initramfs-tools/modules 2>/dev/null \
+    || echo "apple-ibridge" >> /etc/initramfs-tools/modules
+echo "apple-bce"    > /etc/modules-load.d/apple-bce.conf
+echo "apple-ibridge" >> /etc/modules-load.d/apple-bce.conf
+
+T2_KVER=$(ls /lib/modules/ | grep -i t2 | sort -V | tail -1)
+if [[ -n "${T2_KVER}" ]]; then
+    update-initramfs -u -k "${T2_KVER}"
+else
+    log "WARNING: No T2 kernel found in /lib/modules/ — initramfs not updated"
+fi
+
+# ── 6. Pin T2 kernel in proxmox-boot-tool ────────────────────────────────────
+log "6. Pinning T2 kernel in proxmox-boot-tool..."
+if command -v proxmox-boot-tool &>/dev/null && [[ -n "${T2_KVER}" ]]; then
+    proxmox-boot-tool kernel add "${T2_KVER}"  2>/dev/null || true
+    proxmox-boot-tool kernel pin "${T2_KVER}"  2>/dev/null || true
+    proxmox-boot-tool refresh                  2>/dev/null || true
+    log "  T2 kernel ${T2_KVER} pinned as default boot kernel."
+else
+    log "  proxmox-boot-tool not available or no T2 kernel found — skipping pin."
+fi
+
+# ── 7. Create sentinel and reboot ─────────────────────────────────────────────
+log "7. Creating sentinel file..."
+touch "${SENTINEL}"
+
+log ""
+log "========================================"
+log " T2 first boot setup complete!"
+log " Rebooting into T2 kernel in 5 seconds..."
+log "========================================"
+sleep 5
+reboot

@@ -1,0 +1,17 @@
+[Unit]
+Description=T2 Mac First Boot Post-Install Setup
+# Only runs once — the sentinel file is created after successful execution
+ConditionPathExists=!/etc/t2-first-boot-done
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /usr/bin/t2-first-boot
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# run_in_chroot.sh — Runs inside pve-base.squashfs chroot
+# Called by build.sh stage 4. Installs the T2 kernel, hardware support
+# packages, and configures the system for T2 Mac hardware.
+#
+# WiFi strategy: uses broadcom-sta-dkms (Debian equivalent of Arch's broadcom-wl).
+# This is the same approach as EndeavourOS-ISO-t2 — no Apple firmware blobs needed.
+# The wl.ko module is built at ISO build time via DKMS using the T2 kernel headers.
+#
+# Do NOT run this directly — it is copied into the squashfs by build.sh.
+
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+log() { echo "[chroot] $*"; }
+
+log "##############################"
+log "# start chrooted commandlist #"
+log "##############################"
+
+# ── 1. Configure apt sources ──────────────────────────────────────────────────
+log "---> 1. Configuring apt sources..."
+
+# Add Debian non-free-firmware for firmware-brcm80211
+# Keep the existing Proxmox and Debian repos intact; just ensure non-free-firmware is present.
+if grep -qE "^deb .* bookworm " /etc/apt/sources.list 2>/dev/null; then
+    # Patch existing bookworm line to include non-free-firmware if not already present
+    if ! grep -q "non-free-firmware" /etc/apt/sources.list; then
+        sed -i '/^deb .* bookworm / s/$/ non-free non-free-firmware/' /etc/apt/sources.list
+    fi
+else
+    # No existing bookworm line — add Debian mirrors
+    cat >> /etc/apt/sources.list << 'EOF'
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+EOF
+fi
+
+# t2.list was placed by overlayfs/ (key was also placed by overlayfs/)
+apt-get update -q
+
+# ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────
+log "---> 2. Installing T2 pve-kernel packages..."
+if ls /tmp/packages/pve-kernel-*t2*_amd64.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/packages/pve-kernel-*t2*_amd64.deb || apt-get install -f -y
+else
+    log "ERROR: T2 kernel .deb not found in /tmp/packages/"
+    exit 1
+fi
+
+if ls /tmp/packages/pve-headers-*t2*_amd64.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/packages/pve-headers-*t2*_amd64.deb || apt-get install -f -y
+else
+    log "  (pve-headers not found — skipping)"
+fi
+
+# ── 3. Install T2 hardware support packages ───────────────────────────────────
+log "---> 3. Installing T2 hardware support packages..."
+# apple-t2-audio-config: DSP/UCM config files for T2 HDA audio via apple-bce
+apt-get install -y apple-t2-audio-config || log "WARNING: apple-t2-audio-config unavailable"
+
+# tiny-dfr: Touch Bar userspace daemon (optional — not needed on Mac mini/Pro)
+apt-get install -y tiny-dfr 2>/dev/null \
+    && log "  tiny-dfr installed (Touch Bar support)" \
+    || log "  tiny-dfr not available — skipping (Touch Bar will not be functional)"
+
+# ── 3b. Install broadcom-sta-dkms for WiFi (same approach as EndeavourOS-ISO-t2) ──
+log "---> 3b. Installing broadcom-sta-dkms (Broadcom WiFi, no Apple firmware needed)..."
+# broadcom-sta-dkms is the Debian equivalent of Arch's broadcom-wl.
+# It provides the out-of-tree 'wl' kernel module and works without Apple firmware blobs.
+# DKMS builds wl.ko here at ISO build time using the T2 kernel headers already installed.
+apt-get install -y dkms broadcom-sta-dkms broadcom-sta-common \
+    || log "WARNING: broadcom-sta-dkms unavailable — WiFi will require firmware extraction"
+
+# Verify the wl module was built for the T2 kernel
+T2_KVER_CHECK=$(ls /lib/modules/ | grep -i t2 | sort -V | tail -1)
+if [[ -n "${T2_KVER_CHECK}" ]] && [[ -f "/lib/modules/${T2_KVER_CHECK}/updates/dkms/wl.ko" ]]; then
+    log "  wl.ko built successfully for ${T2_KVER_CHECK}"
+else
+    log "  WARNING: wl.ko not found for ${T2_KVER_CHECK} — DKMS build may have failed"
+fi
+
+# ── 4. Configure initramfs for T2 modules ────────────────────────────────────
+log "---> 4. Configuring initramfs to include T2 modules..."
+# apple-bce must be in the initramfs so keyboard/trackpad work before root mount
+if ! grep -q "^apple-bce" /etc/initramfs-tools/modules 2>/dev/null; then
+    echo "apple-bce"    >> /etc/initramfs-tools/modules
+fi
+if ! grep -q "^apple-ibridge" /etc/initramfs-tools/modules 2>/dev/null; then
+    echo "apple-ibridge" >> /etc/initramfs-tools/modules
+fi
+
+# Rebuild initramfs for the T2 kernel
+T2_KVER=$(ls /lib/modules/ | grep -i t2 | sort -V | tail -1)
+if [[ -n "${T2_KVER}" ]]; then
+    log "  Regenerating initramfs for kernel: ${T2_KVER}"
+    update-initramfs -u -k "${T2_KVER}"
+else
+    log "WARNING: No T2 kernel found in /lib/modules/ — initramfs not updated"
+fi
+
+# ── 5. Configure GRUB kernel parameters ──────────────────────────────────────
+log "---> 5. Configuring GRUB kernel parameters for T2 hardware..."
+# These parameters are required for T2 PCIe enumeration (NVMe, WiFi):
+#   intel_iommu=on  — enable VT-d IOMMU (required for T2 PCIe devices)
+#   iommu=pt        — passthrough mode, reduces IOMMU overhead
+#   pcie_ports=compat — required for Apple T2 PCIe port enumeration
+if [[ -f /etc/default/grub ]]; then
+    sed -i 's|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt pcie_ports=compat"|' \
+        /etc/default/grub
+    sed -i 's|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT="quiet"|' \
+        /etc/default/grub
+fi
+
+# ── 6. Enable T2 systemd services ────────────────────────────────────────────
+log "---> 6. Enabling T2 systemd services..."
+systemctl enable apple-bce-load.service   2>/dev/null || true
+systemctl enable t2-hardware-setup.service 2>/dev/null || true
+systemctl enable t2-first-boot.service    2>/dev/null || true
+
+# ── 7. Stage offline packages for post-install use ───────────────────────────
+log "---> 7. Staging packages for post-install use..."
+mkdir -p /usr/share/proxmox-t2/packages/
+cp /tmp/packages/*.deb /usr/share/proxmox-t2/packages/ 2>/dev/null || true
+log "  Staged $(ls /usr/share/proxmox-t2/packages/ | wc -l) package(s) to /usr/share/proxmox-t2/packages/"
+
+# ── 8. Create package versions file ──────────────────────────────────────────
+log "---> 8. Creating package versions reference..."
+{
+    dpkg -l 'pve-kernel-*t2*' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'apple-t2-audio-config' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'broadcom-sta-dkms' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'tiny-dfr' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+} > /usr/share/proxmox-t2/package-versions.txt 2>/dev/null || true
+
+# ── 9. Clean up ───────────────────────────────────────────────────────────────
+log "---> 9. Cleaning up..."
+apt-get clean
+rm -rf /tmp/packages/
+rm -f /tmp/run_in_chroot.sh
+
+log "############################"
+log "# end chrooted commandlist #"
+log "############################"

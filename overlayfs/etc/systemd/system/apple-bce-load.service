@@ -1,0 +1,14 @@
+[Unit]
+Description=Load apple-bce kernel module for T2 Mac hardware
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=multi-user.target graphical.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/modprobe apple-ibridge
+ExecStart=/sbin/modprobe apple-bce
+
+[Install]
+WantedBy=multi-user.target

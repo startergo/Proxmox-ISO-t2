@@ -1,0 +1,5 @@
+This directory is populated by prepare.sh at build time.
+It holds T2 kernel .deb packages downloaded from:
+  https://github.com/AdityaGarg8/pve-edge-kernel-t2/releases
+
+Files here are excluded from git (.gitignore).

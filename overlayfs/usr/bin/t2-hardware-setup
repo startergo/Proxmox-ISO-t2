@@ -1,0 +1,69 @@
+#!/bin/bash
+# t2-hardware-setup — Detect T2 Mac hardware and activate modules
+# Runs at boot via t2-hardware-setup.service
+#
+# WiFi strategy: uses broadcom-sta (wl module) — same approach as EndeavourOS-ISO-t2.
+# No Apple firmware blobs needed. The wl.ko module was built at ISO build time via DKMS.
+
+set -euo pipefail
+
+LOG="/var/log/t2-hardware-setup.log"
+exec > >(tee -a "${LOG}") 2>&1
+
+log() { echo "[t2-setup] $*"; }
+
+log "Starting T2 hardware detection..."
+log "Kernel: $(uname -r)"
+
+# ── Load apple-ibridge and apple-bce ─────────────────────────────────────────
+for mod in apple-ibridge apple-bce; do
+    if ! lsmod | grep -q "${mod//-/_}"; then
+        log "Loading module: ${mod}"
+        modprobe "${mod}" 2>/dev/null \
+            && log "  ${mod} loaded." \
+            || log "  WARNING: ${mod} could not be loaded."
+    else
+        log "Module ${mod} already loaded."
+    fi
+done
+
+# ── Detect Broadcom WiFi and activate wl module ───────────────────────────────
+# Uses broadcom-sta (wl) — equivalent to EndeavourOS-ISO-t2's broadcom-wl approach.
+# No Apple firmware extraction required.
+log "Checking for Broadcom WiFi device..."
+
+BROADCOM_FOUND=0
+if lspci -nn 2>/dev/null | grep -iE 'network|wireless' | grep -qi 'broadcom\|14e4'; then
+    BROADCOM_FOUND=1
+    log "Broadcom WiFi device detected."
+fi
+
+if [[ "${BROADCOM_FOUND}" -eq 1 ]]; then
+    # Check if wl module is available (built by DKMS at ISO build time)
+    if modinfo wl &>/dev/null; then
+        log "Activating broadcom-sta (wl) WiFi driver..."
+        # Unload conflicting drivers (same list as EndeavourOS broadcom-wl_enable.sh)
+        for mod in b43 b43legacy bcm43xx bcma brcm80211 brcmfmac brcmsmac ssb tg3 wl; do
+            modprobe -r "${mod}" 2>/dev/null || true
+        done
+        depmod -a 2>/dev/null || true
+        modprobe wl 2>/dev/null \
+            && log "  wl module loaded — WiFi ready." \
+            || log "  WARNING: wl module failed to load. Check dmesg."
+    else
+        log "WARNING: wl module not available in $(uname -r)."
+        log "  DKMS may not have built it. WiFi may not work."
+    fi
+else
+    log "No Broadcom WiFi device detected — skipping wl setup."
+fi
+
+# ── Report audio status ───────────────────────────────────────────────────────
+log "Checking audio (T2 HDA via apple-bce)..."
+if lsmod | grep -q snd_hda_intel; then
+    log "snd-hda-intel loaded — T2 audio should be functional."
+else
+    log "snd-hda-intel not yet loaded (may load later)."
+fi
+
+log "T2 hardware setup complete. Log: ${LOG}"
