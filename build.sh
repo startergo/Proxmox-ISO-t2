@@ -105,12 +105,16 @@ stage_extract_base_squashfs() {
         rm -rf "${PVE_BASE_EXTRACT}"
     fi
 
-    local squashfs="${ISO_EXTRACT_DIR}/proxmox/pve-base.squashfs"
-    if [[ ! -f "${squashfs}" ]]; then
-        echo "ERROR: pve-base.squashfs not found at ${squashfs}"
-        echo "       The Proxmox ISO structure may have changed. Check ISO_EXTRACT_DIR."
+    # Locate the squashfs regardless of ISO directory layout changes
+    local squashfs
+    squashfs=$(find "${ISO_EXTRACT_DIR}" -name "pve-base.squashfs" -type f | head -1)
+    if [[ -z "${squashfs}" ]]; then
+        echo "ERROR: pve-base.squashfs not found anywhere under ${ISO_EXTRACT_DIR}"
+        echo "       ISO directory contents:"
+        find "${ISO_EXTRACT_DIR}" -maxdepth 3 | sort
         exit 1
     fi
+    log "  Found squashfs: ${squashfs}"
 
     unsquashfs -d "${PVE_BASE_EXTRACT}" "${squashfs}"
     log "  Squashfs extracted to: ${PVE_BASE_EXTRACT}"
