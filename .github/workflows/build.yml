@@ -71,6 +71,11 @@ jobs:
             TAG="v${PVE_VERSION}-t2-$(date -u +%Y%m%d%H%M)"
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "do_release=true" >> "$GITHUB_OUTPUT"
+            # Push the tag so softprops/action-gh-release can find it
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "${TAG}"
+            git push origin "${TAG}"
           else
             echo "do_release=false" >> "$GITHUB_OUTPUT"
           fi
