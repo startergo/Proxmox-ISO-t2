@@ -42,17 +42,17 @@ apt-get update -q
 
 # ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────
 log "---> 2. Installing T2 pve-kernel packages..."
-if ls /tmp/packages/pve-kernel-*t2*_amd64.deb 1>/dev/null 2>&1; then
-    dpkg -i /tmp/packages/pve-kernel-*t2*_amd64.deb || apt-get install -f -y
+if ls /tmp/packages/proxmox-kernel-*pve-t2*_amd64.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/packages/proxmox-kernel-*pve-t2*_amd64.deb || apt-get install -f -y
 else
     log "ERROR: T2 kernel .deb not found in /tmp/packages/"
     exit 1
 fi
 
-if ls /tmp/packages/pve-headers-*t2*_amd64.deb 1>/dev/null 2>&1; then
-    dpkg -i /tmp/packages/pve-headers-*t2*_amd64.deb || apt-get install -f -y
+if ls /tmp/packages/proxmox-headers-*pve-t2*_amd64.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/packages/proxmox-headers-*pve-t2*_amd64.deb || apt-get install -f -y
 else
-    log "  (pve-headers not found — skipping)"
+    log "  (proxmox-headers not found — skipping)"
 fi
 
 # ── 3. Install T2 hardware support packages ───────────────────────────────────
@@ -128,7 +128,7 @@ log "  Staged $(ls /usr/share/proxmox-t2/packages/ | wc -l) package(s) to /usr/s
 # ── 8. Create package versions file ──────────────────────────────────────────
 log "---> 8. Creating package versions reference..."
 {
-    dpkg -l 'pve-kernel-*t2*' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'proxmox-kernel-*pve-t2*' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
     dpkg -l 'apple-t2-audio-config' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
     dpkg -l 'broadcom-sta-dkms' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
     dpkg -l 'tiny-dfr' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
