@@ -1,5 +1,7 @@
 # Proxmox-ISO-t2
 
+[![Build](https://github.com/startergo/Proxmox-ISO-t2/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/startergo/Proxmox-ISO-t2/actions/workflows/build.yml)
+
 Repackages the official **Proxmox VE ISO** with T2 Mac hardware support, producing a
 bootable installer that works on Apple T2-based Macs out of the box.
 
