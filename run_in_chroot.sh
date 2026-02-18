@@ -36,12 +36,8 @@ deb http://deb.debian.org/debian-security bookworm-security main contrib non-fre
 EOF
 fi
 
-# Install ca-certificates first (from Debian HTTP repos) so HTTPS repos work
-apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list \
-                  -o Dir::Etc::sourceparts=/dev/null
-apt-get install -y --no-install-recommends ca-certificates
-
 # t2.list was placed by overlayfs/ (key was also placed by overlayfs/)
+# CA certs were copied from the host by build.sh so HTTPS repos work.
 apt-get update -q
 
 # ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────

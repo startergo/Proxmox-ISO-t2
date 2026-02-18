@@ -158,6 +158,11 @@ stage_chroot() {
     # Provide DNS resolution inside chroot
     cp /etc/resolv.conf "${PVE_BASE_EXTRACT}/etc/resolv.conf"
 
+    # Copy host CA certificates so HTTPS apt repos work inside the chroot
+    # (ca-certificates cannot be installed via apt in the minimal Proxmox squashfs)
+    mkdir -p "${PVE_BASE_EXTRACT}/etc/ssl/certs"
+    cp /etc/ssl/certs/ca-certificates.crt "${PVE_BASE_EXTRACT}/etc/ssl/certs/ca-certificates.crt"
+
     # Run the chroot script
     chroot "${PVE_BASE_EXTRACT}" /bin/bash /tmp/run_in_chroot.sh
 
