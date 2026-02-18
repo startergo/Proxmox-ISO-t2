@@ -47,11 +47,17 @@ done
 # CA certs were copied from the host by build.sh so HTTPS repos work.
 apt-get update -q
 
+# usr-is-merged must come first: init-system-helpers (pulled in by almost
+# everything) depends on usrmerge|usr-is-merged, and the Proxmox squashfs
+# lacks the marker package, which causes the entire dep chain to break.
+apt-get install -y usr-is-merged
+
 # Install initramfs prerequisites now, before any kernel package is unpacked.
 # dpkg runs /etc/kernel/postinst.d/initramfs-tools immediately on kernel install,
 # so zstd and console-setup must be present at that point.
-# Fail hard if these can't be installed — missing them produces a broken initramfs.
-apt-get install -y zstd console-setup
+# console-setup depends on keyboard-configuration + xkb-data + console-setup-linux;
+# install them all explicitly so apt doesn't bail on unmet deps.
+apt-get install -y zstd keyboard-configuration console-setup-linux xkb-data console-setup
 
 # ── 2. Install T2 pve-kernel from staged .deb packages ───────────────────────
 log "---> 2. Installing T2 pve-kernel packages..."
@@ -92,11 +98,6 @@ MODPROBE_REAL=$(readlink -f /usr/sbin/modprobe 2>/dev/null || echo /usr/sbin/mod
 mv "${MODPROBE_REAL}" "${MODPROBE_REAL}.real" 2>/dev/null || true
 printf '#!/bin/sh\nexit 0\n' > "${MODPROBE_REAL}"
 chmod +x "${MODPROBE_REAL}"
-
-# The Proxmox squashfs is already merged-usr but lacks this marker package,
-# which blocks init-system-helpers and packages that depend on it.
-apt-get install -y --no-install-recommends usr-is-merged \
-    || log "WARNING: usr-is-merged unavailable — subsequent installs may fail"
 
 # tiny-dfr-adv: Touch Bar daemon (bookworm t2linux repo provides tiny-dfr-adv)
 apt-get install -y tiny-dfr-adv 2>/dev/null \
