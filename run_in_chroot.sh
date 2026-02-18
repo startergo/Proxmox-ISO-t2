@@ -65,6 +65,25 @@ fi
 # ── 3. Install T2 hardware support packages ───────────────────────────────────
 log "---> 3. Installing T2 hardware support packages..."
 
+# Prevent package post-install scripts from starting services or running
+# modprobe in the chroot — neither systemd nor T2 kernel modules are present.
+cat > /usr/sbin/policy-rc.d << 'POLICY'
+#!/bin/sh
+# Disable service (re)starts during package installation in chroot
+exit 101
+POLICY
+chmod +x /usr/sbin/policy-rc.d
+
+# Shim modprobe so post-install scripts that probe T2/Broadcom modules don't
+# hard-fail (modules simply aren't present under the build host kernel).
+mv /sbin/modprobe /sbin/modprobe.real 2>/dev/null || true
+cat > /sbin/modprobe << 'MODPROBE'
+#!/bin/sh
+# No-op shim: kernel modules cannot be loaded inside the build chroot.
+exit 0
+MODPROBE
+chmod +x /sbin/modprobe
+
 # The Proxmox squashfs is already merged-usr but lacks this marker package,
 # which blocks init-system-helpers and packages that depend on it.
 apt-get install -y --no-install-recommends usr-is-merged \
@@ -84,6 +103,10 @@ apt-get install -y tiny-dfr-adv 2>/dev/null \
 log "---> 3b. Installing apple-firmware (WiFi/Bluetooth firmware from macOS)..."
 apt-get install -y apple-firmware \
     || log "WARNING: apple-firmware unavailable"
+
+# Restore real modprobe and remove policy-rc.d now that package installs are done.
+mv /sbin/modprobe.real /sbin/modprobe 2>/dev/null || true
+rm -f /usr/sbin/policy-rc.d
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
 log "---> 4. Configuring initramfs to include T2 modules..."
