@@ -64,18 +64,21 @@ fi
 
 # ── 3. Install T2 hardware support packages ───────────────────────────────────
 log "---> 3. Installing T2 hardware support packages..."
-# apple-t2-audio-config: DSP/UCM config files for T2 HDA audio via apple-bce
-apt-get install -y apple-t2-audio-config || log "WARNING: apple-t2-audio-config unavailable"
 
-# tiny-dfr: Touch Bar userspace daemon (optional — not needed on Mac mini/Pro)
-apt-get install -y tiny-dfr 2>/dev/null \
-    && log "  tiny-dfr installed (Touch Bar support)" \
-    || log "  tiny-dfr not available — skipping (Touch Bar will not be functional)"
+# The Proxmox squashfs is already merged-usr but lacks this marker package,
+# which blocks init-system-helpers and packages that depend on it.
+apt-get install -y --no-install-recommends usr-is-merged \
+    || log "WARNING: usr-is-merged unavailable — subsequent installs may fail"
 
-# ── 3b. Install Broadcom WiFi firmware ───────────────────────────────────────
-log "---> 3b. Installing firmware-brcm80211 (Broadcom WiFi firmware)..."
-apt-get install -y firmware-brcm80211 \
-    || log "WARNING: firmware-brcm80211 unavailable"
+# tiny-dfr-adv: Touch Bar daemon (bookworm t2linux repo provides tiny-dfr-adv)
+apt-get install -y tiny-dfr-adv 2>/dev/null \
+    && log "  tiny-dfr-adv installed (Touch Bar support)" \
+    || log "  tiny-dfr-adv not available — skipping"
+
+# ── 3b. Install Apple WiFi/Bluetooth firmware ─────────────────────────────────
+log "---> 3b. Installing apple-firmware (WiFi/Bluetooth firmware from macOS)..."
+apt-get install -y apple-firmware \
+    || log "WARNING: apple-firmware unavailable"
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
 log "---> 4. Configuring initramfs to include T2 modules..."
@@ -125,9 +128,8 @@ log "  Staged $(ls /usr/share/proxmox-t2/packages/ | wc -l) package(s) to /usr/s
 log "---> 8. Creating package versions reference..."
 {
     dpkg -l 'proxmox-kernel-*pve-t2*' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
-    dpkg -l 'apple-t2-audio-config' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
-    dpkg -l 'firmware-brcm80211' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
-    dpkg -l 'tiny-dfr' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'apple-firmware' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
+    dpkg -l 'tiny-dfr-adv' 2>/dev/null | grep '^ii' | awk '{print $2, $3}' || true
 } > /usr/share/proxmox-t2/package-versions.txt 2>/dev/null || true
 
 # ── 9. Clean up ───────────────────────────────────────────────────────────────

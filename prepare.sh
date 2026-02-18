@@ -58,6 +58,7 @@ log "  Key saved: ${KEY_DEST}"
 log "Writing t2linux APT source list..."
 cat > "${SCRIPT_DIR}/overlayfs/etc/apt/sources.list.d/t2.list" << EOF
 ${T2_APT_REPO_LIST}
+${T2_APPLE_FIRMWARE_LIST}
 EOF
 
 # ── Ensure build scripts are executable ──────────────────────────────────────

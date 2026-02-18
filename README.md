@@ -12,15 +12,13 @@ Modelled after [EndeavourOS-ISO-t2](https://github.com/endeavouros-team/Endeavou
 | Component | Source |
 |---|---|
 | T2-patched Proxmox kernel (`pve-edge-kernel-t2`) | [AdityaGarg8/pve-edge-kernel-t2](https://github.com/AdityaGarg8/pve-edge-kernel-t2) |
-| `apple-t2-audio-config` | [t2linux APT repo](https://github.com/AdityaGarg8/t2-ubuntu-repo) |
-| `firmware-brcm80211` | Debian non-free-firmware |
-| `apple-firmware-script` | t2linux APT repo |
-| `tiny-dfr` (Touch Bar) | t2linux APT repo |
+| `apple-firmware` (WiFi/BT firmware) | [AdityaGarg8/Apple-Firmware](https://github.com/AdityaGarg8/Apple-Firmware) |
+| `tiny-dfr-adv` (Touch Bar) | [t2linux APT repo](https://github.com/AdityaGarg8/t2-ubuntu-repo) |
 | T2 kernel parameters in GRUB | `intel_iommu=on iommu=pt pcie_ports=compat` |
 | Hardware detection service | `t2-hardware-setup.service` |
 | First-boot kernel setup | `t2-first-boot.service` |
 
-**WiFi drivers are incorporated** into the ISO via `firmware-brcm80211` and the `apple-firmware-script`.
+**WiFi/Bluetooth firmware is incorporated** into the ISO via the `apple-firmware` package (firmware extracted from macOS, sourced from [AdityaGarg8/Apple-Firmware](https://github.com/AdityaGarg8/Apple-Firmware)).
 
 ---
 
@@ -110,9 +108,10 @@ The service only runs once. Check `/var/log/t2-first-boot.log` for details.
 
 ## WiFi
 
-T2 Mac WiFi (Broadcom BCM4364/BCM4377) drivers are incorporated into the ISO.
-The `firmware-brcm80211` package and `apple-firmware-script` are included and
-activated automatically — no manual firmware installation is required.
+T2 Mac WiFi and Bluetooth firmware is incorporated into the ISO via the
+`apple-firmware` package — firmware files extracted from macOS, provided by
+[AdityaGarg8/Apple-Firmware](https://github.com/AdityaGarg8/Apple-Firmware).
+No manual firmware installation is required.
 
 See also: [wiki.t2linux.org/guides/wifi-bluetooth](https://wiki.t2linux.org/guides/wifi-bluetooth/)
 
