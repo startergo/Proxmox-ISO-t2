@@ -82,23 +82,28 @@ chmod +x /usr/sbin/policy-rc.d
 
 # Shim modprobe so post-install scripts that probe T2/Broadcom modules don't
 # hard-fail (modules simply aren't present under the build host kernel).
-mv /sbin/modprobe /sbin/modprobe.real 2>/dev/null || true
-cat > /sbin/modprobe << 'MODPROBE'
+SYSTEMCTL_REAL=$(readlink -f /usr/bin/systemctl 2>/dev/null || echo /usr/bin/systemctl)
+MODPROBE_REAL=$(readlink -f /sbin/modprobe 2>/dev/null || readlink -f /usr/sbin/modprobe 2>/dev/null || echo /usr/sbin/modprobe)
+
+mv "${MODPROBE_REAL}" "${MODPROBE_REAL}.real" 2>/dev/null || true
+cat > "${MODPROBE_REAL}" << 'MODPROBE'
 #!/bin/sh
 # No-op shim: kernel modules cannot be loaded inside the build chroot.
 exit 0
 MODPROBE
-chmod +x /sbin/modprobe
+chmod +x "${MODPROBE_REAL}"
 
-# Shim systemctl so post-install scripts that call 'systemctl start/restart'
-# directly (bypassing policy-rc.d) don't fail — no systemd in chroot.
-mv /bin/systemctl /bin/systemctl.real 2>/dev/null || true
-cat > /bin/systemctl << 'SYSTEMCTL'
+# Shim systemctl at its canonical path so postinst scripts that call
+# 'systemctl start' directly don't fail — no systemd in chroot.
+# /bin and /sbin are symlinks to /usr/bin and /usr/sbin in merged-usr Debian,
+# so we must shim the resolved canonical path.
+mv "${SYSTEMCTL_REAL}" "${SYSTEMCTL_REAL}.real" 2>/dev/null || true
+cat > "${SYSTEMCTL_REAL}" << 'SYSTEMCTL'
 #!/bin/sh
 # No-op shim: systemd is not running inside the build chroot.
 exit 0
 SYSTEMCTL
-chmod +x /bin/systemctl
+chmod +x "${SYSTEMCTL_REAL}"
 
 # The Proxmox squashfs is already merged-usr but lacks this marker package,
 # which blocks init-system-helpers and packages that depend on it.
@@ -116,8 +121,8 @@ apt-get install -y apple-firmware \
     || log "WARNING: apple-firmware unavailable"
 
 # Restore real modprobe and systemctl, and remove policy-rc.d now that package installs are done.
-mv /sbin/modprobe.real /sbin/modprobe 2>/dev/null || true
-mv /bin/systemctl.real /bin/systemctl 2>/dev/null || true
+mv "${MODPROBE_REAL}.real" "${MODPROBE_REAL}" 2>/dev/null || true
+mv "${SYSTEMCTL_REAL}.real" "${SYSTEMCTL_REAL}" 2>/dev/null || true
 rm -f /usr/sbin/policy-rc.d
 
 # ── 4. Configure initramfs for T2 modules ────────────────────────────────────
