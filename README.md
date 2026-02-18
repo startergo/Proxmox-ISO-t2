@@ -11,9 +11,9 @@ Modelled after [EndeavourOS-ISO-t2](https://github.com/endeavouros-team/Endeavou
 
 | Component | Source |
 |---|---|
-| T2-patched Proxmox kernel (`pve-edge-kernel-t2`) | [AdityaGarg8/pve-edge-kernel-t2](https://github.com/AdityaGarg8/pve-edge-kernel-t2) |
-| `apple-firmware` (WiFi/BT firmware) | [AdityaGarg8/Apple-Firmware](https://github.com/AdityaGarg8/Apple-Firmware) |
-| `tiny-dfr-adv` (Touch Bar) | [t2linux APT repo](https://github.com/AdityaGarg8/t2-ubuntu-repo) |
+| T2-patched Proxmox kernel (`proxmox-kernel-*-pve-t2`) | [AdityaGarg8/pve-edge-kernel-t2](https://github.com/AdityaGarg8/pve-edge-kernel-t2) |
+| `apple-firmware` (WiFi/BT firmware) | [AdityaGarg8/Apple-Firmware](https://github.com/AdityaGarg8/Apple-Firmware) APT repo |
+| `tiny-dfr-adv` (Touch Bar) | [AdityaGarg8/t2-ubuntu-repo](https://github.com/AdityaGarg8/t2-ubuntu-repo) APT repo |
 | T2 kernel parameters in GRUB | `intel_iommu=on iommu=pt pcie_ports=compat` |
 | Hardware detection service | `t2-hardware-setup.service` |
 | First-boot kernel setup | `t2-first-boot.service` |
