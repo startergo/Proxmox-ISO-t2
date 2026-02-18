@@ -20,7 +20,7 @@ Modelled after [EndeavourOS-ISO-t2](https://github.com/endeavouros-team/Endeavou
 | Hardware detection service | `t2-hardware-setup.service` |
 | First-boot kernel setup | `t2-first-boot.service` |
 
-**WiFi firmware is NOT included** — it cannot be legally redistributed. See [WiFi Firmware](#wifi-firmware).
+**WiFi drivers are incorporated** into the ISO via `firmware-brcm80211` and the `apple-firmware-script`.
 
 ---
 
@@ -108,19 +108,11 @@ The service only runs once. Check `/var/log/t2-first-boot.log` for details.
 
 ---
 
-## WiFi firmware
+## WiFi
 
-T2 Mac WiFi (Broadcom BCM4364/BCM4377) requires firmware extracted from macOS.
-After booting the ISO, connect via Ethernet, then run:
-
-```bash
-# Option A — automated (downloads from macOS Recovery)
-apt install apple-firmware-script
-apple-firmware-script
-
-# Option B — see full guide
-/usr/bin/t2-wifi-firmware
-```
+T2 Mac WiFi (Broadcom BCM4364/BCM4377) drivers are incorporated into the ISO.
+The `firmware-brcm80211` package and `apple-firmware-script` are included and
+activated automatically — no manual firmware installation is required.
 
 See also: [wiki.t2linux.org/guides/wifi-bluetooth](https://wiki.t2linux.org/guides/wifi-bluetooth/)
 
