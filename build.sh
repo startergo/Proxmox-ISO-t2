@@ -26,6 +26,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 ISO_SRC="${WORK_DIR}/${PVE_ISO_NAME}"
+SQUASHFS_PATH=""  # set by stage_extract_base_squashfs, used by stage_rebuild_base_squashfs
 if [[ ! -f "${ISO_SRC}" ]]; then
     echo "ERROR: Proxmox ISO not found: ${ISO_SRC}"
     echo "       Run ./prepare.sh first."
@@ -106,17 +107,16 @@ stage_extract_base_squashfs() {
     fi
 
     # Locate the squashfs regardless of ISO directory layout changes
-    local squashfs
-    squashfs=$(find "${ISO_EXTRACT_DIR}" -name "pve-base.squashfs" -type f | head -1)
-    if [[ -z "${squashfs}" ]]; then
+    SQUASHFS_PATH=$(find "${ISO_EXTRACT_DIR}" -name "pve-base.squashfs" -type f | head -1)
+    if [[ -z "${SQUASHFS_PATH}" ]]; then
         echo "ERROR: pve-base.squashfs not found anywhere under ${ISO_EXTRACT_DIR}"
         echo "       ISO directory contents:"
         find "${ISO_EXTRACT_DIR}" -maxdepth 3 | sort
         exit 1
     fi
-    log "  Found squashfs: ${squashfs}"
+    log "  Found squashfs: ${SQUASHFS_PATH}"
 
-    unsquashfs -d "${PVE_BASE_EXTRACT}" "${squashfs}"
+    unsquashfs -d "${PVE_BASE_EXTRACT}" "${SQUASHFS_PATH}"
     log "  Squashfs extracted to: ${PVE_BASE_EXTRACT}"
 }
 
@@ -163,6 +163,15 @@ stage_chroot() {
 
     # Remove resolv.conf — will be regenerated at runtime
     rm -f "${PVE_BASE_EXTRACT}/etc/resolv.conf"
+
+    # Unmount bind mounts — must happen before mksquashfs in Stage 5
+    for mp in "${PVE_BASE_EXTRACT}/dev/pts" \
+              "${PVE_BASE_EXTRACT}/dev" \
+              "${PVE_BASE_EXTRACT}/proc" \
+              "${PVE_BASE_EXTRACT}/sys" \
+              "${PVE_BASE_EXTRACT}/run"; do
+        mountpoint -q "${mp}" && umount -l "${mp}" || true
+    done
     log "  Chroot complete."
 }
 
@@ -171,11 +180,15 @@ stage_chroot() {
 # ─────────────────────────────────────────────────────────────────────────────
 stage_rebuild_base_squashfs() {
     log "Stage 5: Rebuilding pve-base.squashfs (zstd compression)..."
-    rm -f "${ISO_EXTRACT_DIR}/proxmox/pve-base.squashfs"
+    rm -f "${SQUASHFS_PATH}"
     mksquashfs "${PVE_BASE_EXTRACT}" \
-               "${ISO_EXTRACT_DIR}/proxmox/pve-base.squashfs" \
+               "${SQUASHFS_PATH}" \
                -comp zstd -Xcompression-level 15 \
-               -b 1M -no-progress -noappend
+               -b 1M -no-progress -noappend \
+               -e "${PVE_BASE_EXTRACT}/proc" \
+               -e "${PVE_BASE_EXTRACT}/sys" \
+               -e "${PVE_BASE_EXTRACT}/dev" \
+               -e "${PVE_BASE_EXTRACT}/run"
     log "  pve-base.squashfs rebuilt."
 }
 
